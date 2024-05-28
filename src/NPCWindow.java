@@ -94,7 +94,7 @@ class PanelStyle {
         topPanel = new JPanel();
         topPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
         /* 顶部选择接口的组件 */
-        window.chooseDevice = new JComboBox<String>(new String[]{"choose a device","all"});
+        window.chooseDevice = new JComboBox<String>(new String[]{"choose a device/pause current process","all"});
         window.chooseDevice.setPrototypeDisplayValue("11111111111111111111111111111111111111111111111111111111111111111111111111111111111");
         /* start按钮 */
         window.startBtn = new JButton("start");
@@ -137,9 +137,9 @@ class PanelStyle {
         NPCWindow.table.getColumnModel().getColumn(0).setPreferredWidth(windowWidth * 2 / 24);
         NPCWindow.table.getColumnModel().getColumn(1).setPreferredWidth(windowWidth * 5 / 24);
         NPCWindow.table.getColumnModel().getColumn(2).setPreferredWidth(windowWidth * 5 / 24);
-        NPCWindow.table.getColumnModel().getColumn(3).setPreferredWidth(windowWidth * 3 / 24);
-        NPCWindow.table.getColumnModel().getColumn(4).setPreferredWidth(windowWidth * 3 / 24);
-        NPCWindow.table.getColumnModel().getColumn(5).setPreferredWidth(windowWidth * 6 / 24);
+        NPCWindow.table.getColumnModel().getColumn(3).setPreferredWidth(windowWidth * 1 / 24);
+        NPCWindow.table.getColumnModel().getColumn(4).setPreferredWidth(windowWidth * 1 / 24);
+        NPCWindow.table.getColumnModel().getColumn(5).setPreferredWidth(windowWidth * 10 / 24);
         // 隐藏最后两列
         NPCWindow.table.getColumnModel().getColumn(6).setMaxWidth(0);
         NPCWindow.table.getColumnModel().getColumn(6).setMinWidth(0);

@@ -215,7 +215,7 @@ class PacketHandler implements PacketReceiver {
                 // 长度
                 String len = String.valueOf(tcpPacket.data.length);
                 // 信息
-                String info = "ACK= " + tcpPacket.ack_num + ", " + "SEQ= " + tcpPacket.sequence + ", " + "window size: " + tcpPacket.window;
+                String info = "ACK= " + tcpPacket.ack_num + ", " + "SEQ= " + tcpPacket.sequence + ", " + "DST_PORT: " + tcpPacket.dst_port + ", " + "SRC_PORT: " + tcpPacket.src_port;
                 // 加入table
                 addToTable(timeStr, srcAddress, dstAddress, pro, len, info, hex, str);
 
@@ -247,7 +247,7 @@ class PacketHandler implements PacketReceiver {
                 // 长度
                 String len = String.valueOf(udpPacket.data.length);
                 // 信息
-                String info = "protocol: " + inferProtocol(udpPacket.src_port, udpPacket.dst_port, str) + ", " + "total length= " + udpPacket.caplen;
+                String info = "protocol: " + inferProtocol(udpPacket.src_port, udpPacket.dst_port, str) + ", " + "DST_PORt " + udpPacket.dst_port + ", " + "SRC_PORT: " + udpPacket.src_port;
                 // 加入table
                 addToTable(timeStr, srcAddress, dstAddress, pro, len, info, hex, str);
 
