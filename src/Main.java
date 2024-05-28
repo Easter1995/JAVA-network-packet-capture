@@ -143,7 +143,6 @@ public class Main {
             jpcapCaptor.close();
         } catch (Exception e) {
             // 异常处理
-            isCapturing = false;
             System.out.println("catch exception in thread" + Thread.currentThread());
         }
     }
