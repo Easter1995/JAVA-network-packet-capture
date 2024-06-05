@@ -1,0 +1,9 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="NetworkPacketCap:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/NetworkPacketCap_jar</output-path>
+    <root id="archive" name="NetworkPacketCap.jar">
+      <element id="module-output" name="NetworkPacketCap" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../jpcap/jpcap.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>
