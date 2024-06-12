@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 /**
  * 主类
@@ -21,6 +22,8 @@ public class Main {
     public static String selectedOption;
     /* 现在是否正在抓包 */
     public static volatile boolean isCapturing = true;
+    /* 线程安全的队列 */
+    public static BlockingQueue<Packet> packetQueue = new LinkedBlockingQueue<>();
     public static void main(String[] args) {
         Main mainObj = new Main();
         /* 开窗口 */
@@ -30,7 +33,7 @@ public class Main {
             NetworkInterface[] devices = JpcapCaptor.getDeviceList();
 
             /* 创建线程池，避免为同一个接口创建多个线程 */
-            ExecutorService threadPool = Executors.newFixedThreadPool(devices.length);
+            ExecutorService threadPool = Executors.newFixedThreadPool(devices.length + 1);
 
             /* 没找到本机的网络设备 */
             if (devices.length == 0) {
@@ -74,6 +77,7 @@ public class Main {
                             threadPool.submit(() -> mainObj.NetworkPacketCap(device));
                         }
                     }
+                    threadPool.submit(() -> mainObj.AnalyzePacket());
                 }
             });
             /* 清空屏幕 */
@@ -118,6 +122,22 @@ public class Main {
         NPCWindow.model.setRowCount(0);
         NPCWindow.byteArea.setText("");
         NPCWindow.txtArea.setText("");
+        packetQueue.clear();
+    }
+
+    /**
+     * 用于将队列里的包取出交给handler
+     */
+    private void AnalyzePacket() {
+        while (isCapturing) {
+            try {
+                Packet packet = packetQueue.take();
+                new PacketHandler().receivePacket(packet);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
     }
     /**
      * 对单独一个网络接口进行抓包
@@ -136,8 +156,17 @@ public class Main {
                 NPCWindow.statusArea.setText("当前接口：" + device.name + "-" + device.description + " 抓包中...");
             }
 
+//            while (isCapturing) {
+//                jpcapCaptor.processPacket(1, new PacketHandler());
+//            }
             while (isCapturing) {
-                jpcapCaptor.processPacket(1, new PacketHandler());
+                jpcapCaptor.processPacket(1, packet -> {
+                    try {
+                        packetQueue.put(packet);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
             }
             // 关闭捕获器，释放资源
             jpcapCaptor.close();
