@@ -9,9 +9,10 @@
 ## 基于多线程的网络抓包程序的实现思路
 
 1. 获取网络接口列表，以网络接口为单位进行抓包。
-2. 创建线程池，每个线程代表一个网络接口，线程池容量就等于网络接口数量。
-3. 根据用户选中的接口，执行线程池里面的线程进行抓包。
-4. 每个线程对自己抓到的包进行逐个处理、分析，目前仅支持分析IP、TCP、UDP三种包。
+2. 创建线程池，每个线程代表一个网络接口和一个分析包的线程，线程池容量就等于网络接口数量+1。
+3. 根据用户选中的接口，执行线程池里面的线程进行抓包，将抓到的包存入一个队列。
+4. 分析线程对队列里面抓到的包进行逐个处理、分析，目前仅支持分析IP、TCP、UDP三种包。
+5. 其中，每次用户点击开始抓包按钮，都会从线程池取出一个用于抓包的线程；但是分析包的线程只有在程序启动的时候创建，这个线程将处理整个程序运行过程中抓到的全部包
 
 ## 图形化界面的设计及使用介绍
 
@@ -74,14 +75,36 @@
 - 显示窗口
 - 获取网络接口
 - 创建线程池、执行线程、退出程序时关闭线程池
+  - 其中线程包括抓包的线程：如果选择了全部的网卡，就一个网卡对应一个线程进行抓包
+  - 包括了处理包的线程
+
 - 监听用户与图形界面的交互，并作出相应反应
+
+全局变量：
+
+- public static String selectedOption：表示用户在filter输入的内容，因为设置为全局变量，因此如果在抓包过程中改变这个值也是支持的
+- public static volatile boolean isRunning：表示程序是否结束，初始为true，在程序退出时执行的关闭逻辑被设为false，目的是保证执行AnalyzePacket()任务的线程安全退出
+- public static BlockingQueue<Packet> packetQueue = new LinkedBlockingQueue<>()：存包的队列，保证全局且线程安全 
+
+监听器：
+
+- window.chooseDevice.addActionListener：监听用户选的网卡是哪个
+- window.startBtn.addActionListener：监听用户是否点击开始按钮，根据用户选择的网卡从线程池启动线程
+- window.clearBtn.addActionListener：监听用户是否要清空屏幕
+- NPCWindow.table.getSelectionModel().addListSelectionListener：根据用户选择的表项（包），来显示包的数据部分的字节和字符串
+- Runtime.getRuntime().addShutdownHook：启动一个新线程用于执行程序退出的逻辑，使用 shutdown 和 awaitTermination 来优雅地关闭线程池，确保所有线程在程序关闭时正确终止
 
 函数：
 
 - private void clearTable()
   - 当用户点击clear按钮时清空抓包展示表项
+  - 清空packetQueue
+- private void AnalyzePacket()
+  - 用来分析包的函数
+  - 将packetQueue里面的包取出来进行分析
+
 - private void NetworkPacketCap(NetworkInterface device)
-  - 对device这个网络接口进行抓包
+  - 对device这个网络接口进行抓包，将抓到的包放入packetQueue
   - 显示status的信息
 
 ## class PacketHandler implements PacketReceiver
@@ -155,7 +178,43 @@
 # 类之间的联系
 
 - NPCWindow类通过获取由PanelStyle类创建的图形化界面实例，将每个实例添加到JFrame实例，来显示整个图形化界面
+
 - NPCWindow实例通过Main类来创建，因此最终图形化界面得以展示。
-- Main类创建线程，通过使线程执行NetworkPacketCap方法来对每个网络接口进行抓包。并且Main类通过调用Java Swing库提供的方法，获取选中的接口、按钮的点击操作，依据用户与图形化界面的交互来改变界面的显示。
-  - 同时Main类将抓到的packet作为参数交给PacketHandler类
+
+- Main类创建线程和窗口、监听用户动作
+
+  - 如果选择了对所有的网卡进行抓包，就从线程池为每一个网卡分配一个线程，该线程执行mainObj.NetworkPacketCap(device)函数，表示对该device进行抓包。这个线程的主要作用就是抓包，并且将抓到的包放入线程安全的队列packetQueue
+
+  - 创建分析包的线程，该线程只有在用户启动程序时创建，在程序退出时被回收。这个线程的主要作用就是取出packetQueue里面的包，并将其交给PacketHandler类来分析包。相当于所有抓包线程抓到的包都将由这一个线程来处理。
+
+  - 最核心的就是这段代码：
+
+    ```java
+    window.startBtn.addActionListener(new ActionListener() {
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            for (NetworkInterface device : devices) {
+                if (selectedOption.equals(device.name + " - " + device.description) || selectedOption.equals("all")) {
+                    // 改变这个值使得当前线程可以结束
+                    isCapturing = false;
+                    if (!selectedOption.equals("all")) {
+                        // 等待一段时间，以确保之前的抓包线程能够结束
+                        try {
+                            Thread.sleep(1000); // 1秒钟
+                        } catch (InterruptedException ex) {
+                            ex.printStackTrace();
+                        }
+                    }
+    
+                    // 提交任务给线程池执行
+                    threadPool.submit(() -> mainObj.NetworkPacketCap(device));
+                }
+            }
+        }
+    });
+    
+    // 创建处理包的线程
+    threadPool.submit(() -> mainObj.AnalyzePacket());
+    ```
+
 - 而在PacketHandler中，将对每个抓到的包进行具体的处理。并且PacketHandler类获取图形化界面展示包信息需要的数据，并通过Java Swing库提供的方法将数据动态地加入图形化界面，从而使得最终数据的展示得以实现并且是动态的。

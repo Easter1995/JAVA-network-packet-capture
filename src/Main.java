@@ -22,6 +22,8 @@ public class Main {
     public static String selectedOption;
     /* 现在是否正在抓包 */
     public static volatile boolean isCapturing = true;
+    /* 程序是否结束 */
+    public static volatile boolean isRunning = true;
     /* 线程安全的队列 */
     public static BlockingQueue<Packet> packetQueue = new LinkedBlockingQueue<>();
     public static void main(String[] args) {
@@ -72,12 +74,10 @@ public class Main {
                                     ex.printStackTrace();
                                 }
                             }
-
                             // 提交任务给线程池执行
                             threadPool.submit(() -> mainObj.NetworkPacketCap(device));
                         }
                     }
-                    threadPool.submit(() -> mainObj.AnalyzePacket());
                 }
             });
             /* 清空屏幕 */
@@ -105,10 +105,21 @@ public class Main {
                 }
             });
 
+            threadPool.submit(() -> mainObj.AnalyzePacket());  // 提交分析包任务
+
             // 在程序退出时执行的关闭逻辑
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 if (threadPool != null && !threadPool.isShutdown()) {
-                    threadPool.shutdown(); // 关闭线程池
+                    isRunning = false;
+                    threadPool.shutdown();
+                    try {
+                        if (!threadPool.awaitTermination(10, TimeUnit.SECONDS)) {
+                            threadPool.shutdownNow();
+                        }
+                    } catch (InterruptedException ex) {
+                        threadPool.shutdownNow();
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }));
         } catch (Exception e) {
@@ -129,10 +140,18 @@ public class Main {
      * 用于将队列里的包取出交给handler
      */
     private void AnalyzePacket() {
-        while (isCapturing) {
+        while (isRunning) {
             try {
-                Packet packet = packetQueue.take();
-                new PacketHandler().receivePacket(packet);
+                if (Thread.currentThread().isInterrupted()) {
+                    break;
+                }
+
+                if (isCapturing) {
+                    Packet packet = packetQueue.take();
+                    new PacketHandler().receivePacket(packet);
+                } else {
+                    Thread.sleep(100);  // 等待 100 毫秒
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -189,38 +208,6 @@ class PacketHandler implements PacketReceiver {
     @Override
     public void receivePacket (Packet packet) {
         String filterInput = NPCWindow.getFilterField().getText();
-        // 分析IP包
-        if (packet.getClass().equals(IPPacket.class)) {
-            // IP数据包, IPPacket类继承 Packet类,包括 IPV4和 IPV6;
-            IPPacket ipPacket = (IPPacket) packet;
-
-            if (filterInput.equals("SRC" + ipPacket.src_ip.toString()) ||
-                filterInput.equals("DST" + ipPacket.dst_ip.toString()) ||
-                filterInput.equals("IP") ||
-                filterInput.isEmpty()) {
-                // 数据部分
-                byte[] dataByte = ipPacket.data;
-                String hex = this.toHexString(dataByte);
-                String str = this.toCharString(dataByte);
-                // 时间戳
-                double time = (double) ipPacket.sec + (double) ipPacket.usec / 1000;
-                String timeStr = String.format("%.2f", time);
-                // 源ip，目的ip
-                String srcAddress = ipPacket.src_ip.toString();
-                String dstAddress = ipPacket.dst_ip.toString();
-                // 协议
-                String pro = "IP";
-                // 长度
-                String len = String.valueOf(ipPacket.data.length);
-                // 信息
-                String info = "TTL: " + ipPacket.hop_limit + " " + "Identification: " + ipPacket.ident + "Version: " + " " + ipPacket.version;
-                // 加入table
-                addToTable(timeStr, srcAddress, dstAddress, pro, len, info, hex, str);
-
-                System.out.println("ip data: " + hex);
-                System.out.println("data: " + str);
-            }
-        }
         // 分析TCP包
         if (packet.getClass().equals(TCPPacket.class)) {
             TCPPacket tcpPacket = (TCPPacket) packet;
@@ -253,7 +240,7 @@ class PacketHandler implements PacketReceiver {
             }
         }
         // 分析UDP包
-        if (packet.getClass().equals(UDPPacket.class)) {
+        else if (packet.getClass().equals(UDPPacket.class)) {
             // UDP数据包
             UDPPacket udpPacket = (UDPPacket) packet;
 
@@ -281,6 +268,38 @@ class PacketHandler implements PacketReceiver {
                 addToTable(timeStr, srcAddress, dstAddress, pro, len, info, hex, str);
 
                 System.out.println("udp data: " + hex);
+                System.out.println("data: " + str);
+            }
+        }
+        // 分析IP包
+        else if (packet.getClass().equals(IPPacket.class)) {
+            // IP数据包, IPPacket类继承 Packet类,包括 IPV4和 IPV6;
+            IPPacket ipPacket = (IPPacket) packet;
+
+            if (filterInput.equals("SRC" + ipPacket.src_ip.toString()) ||
+                filterInput.equals("DST" + ipPacket.dst_ip.toString()) ||
+                filterInput.equals("IP") ||
+                filterInput.isEmpty()) {
+                // 数据部分
+                byte[] dataByte = ipPacket.data;
+                String hex = this.toHexString(dataByte);
+                String str = this.toCharString(dataByte);
+                // 时间戳
+                double time = (double) ipPacket.sec + (double) ipPacket.usec / 1000;
+                String timeStr = String.format("%.2f", time);
+                // 源ip，目的ip
+                String srcAddress = ipPacket.src_ip.toString();
+                String dstAddress = ipPacket.dst_ip.toString();
+                // 协议
+                String pro = "IP";
+                // 长度
+                String len = String.valueOf(ipPacket.data.length);
+                // 信息
+                String info = "TTL: " + ipPacket.hop_limit + " " + "Identification: " + ipPacket.ident + "Version: " + " " + ipPacket.version;
+                // 加入table
+                addToTable(timeStr, srcAddress, dstAddress, pro, len, info, hex, str);
+
+                System.out.println("ip data: " + hex);
                 System.out.println("data: " + str);
             }
         }
